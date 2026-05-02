@@ -1,2 +1,2 @@
-const CACHE = 'ken-chat-v1';
+const CACHE = 'ken-chat-v2';
 self.addEventListener('fetch', e => {});
