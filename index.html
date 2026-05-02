@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d1b2a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ケンチャット">
+  <link rel="apple-touch-icon" href="ken_icon.png">
+  <meta property="og:title" content="ケン / ナンバズ">
+  <meta property="og:description" content="お笑いコンビ「ナンバズ」のツッコミ担当ケンが星を読む。">
+  <meta property="og:image" content="https://tsui-oku.github.io/ken_chat/ogp.png">
+  <meta property="og:url" content="https://tsui-oku.github.io/ken_chat/">
+  <meta property="og:type" content="website">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ケン 占い</title>
+  <!-- astronomy-engine: 天体位置計算ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.19/astronomy.browser.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:url('ken_bg.jpg') center/cover fixed;
+  display:flex;justify-content:center;align-items:center;
+  min-height:100vh;
+  font-family:-apple-system,'Hiragino Mincho ProN','Yu Mincho','Hiragino Kaku Gothic ProN',serif;
+}
+#app{width:390px;height:700px;background:rgba(13,27,42,0.92);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 4px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(201,168,76,0.3);position:relative;backdrop-filter:blur(8px);}
+#topbar{background:linear-gradient(180deg,#0d1b2a 0%,#112236 100%);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;border-bottom:1px solid rgba(201,168,76,0.3);}
+#topbar .av{width:38px;height:38px;border-radius:50%;overflow:hidden;border:2px solid rgba(201,168,76,0.5);}
+#topbar .av img{width:100%;height:100%;object-fit:cover;}
+#topbar .info{flex:1;}
+#topbar .name{font-size:15px;font-weight:600;color:#e8dcc8;letter-spacing:0.05em;}
+#topbar .status{font-size:11px;color:rgba(201,168,76,0.8);}
+#topbar .icons{display:flex;gap:10px;align-items:center;}
+#favor-bar-wrap{height:2px;background:rgba(201,168,76,0.2);border-radius:2px;margin-top:4px;}
+#favor-bar{height:100%;background:linear-gradient(90deg,#8a6a2a,#c9a84c,#e8d5a0);border-radius:2px;transition:width 0.8s ease;}
+#favor-label{font-size:9px;color:rgba(201,168,76,0.6);margin-top:2px;letter-spacing:0.08em;}
+
+#msgs{flex:1;overflow-y:auto;background:transparent;padding:12px 10px;display:flex;flex-direction:column;gap:8px;}
+#msgs::-webkit-scrollbar{width:3px;}
+#msgs::-webkit-scrollbar-track{background:transparent;}
+#msgs::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.3);border-radius:2px;}
+
+.date-sep{text-align:center;font-size:11px;color:rgba(201,168,76,0.5);background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:2px 12px;margin:4px auto;width:fit-content;letter-spacing:0.1em;}
+.msg-row{display:flex;align-items:flex-end;gap:6px;}
+.msg-row.right{flex-direction:row-reverse;}
+.av-s{width:34px;height:34px;border-radius:50%;overflow:hidden;flex-shrink:0;align-self:flex-start;margin-top:2px;border:1px solid rgba(201,168,76,0.4);}
+.av-s img{width:100%;height:100%;object-fit:cover;}
+.bubble-wrap{display:flex;flex-direction:column;max-width:72%;}
+.msg-row.right .bubble-wrap{align-items:flex-end;}
+.sender-name{font-size:10px;color:rgba(201,168,76,0.6);margin-bottom:3px;margin-left:3px;letter-spacing:0.05em;}
+.bubble{padding:10px 13px;font-size:13px;line-height:1.85;white-space:pre-wrap;word-break:break-word;letter-spacing:0.02em;}
+.bubble.left{background:rgba(20,38,60,0.95);color:#d4c9b8;border-radius:16px;border-top-left-radius:4px;border:1px solid rgba(201,168,76,0.2);}
+.bubble.right{background:rgba(201,168,76,0.85);color:#0d1b2a;border-radius:16px;border-top-right-radius:4px;font-family:-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;}
+.bubble.shin{background:rgba(30,55,50,0.9);color:#c8ddd0;border-radius:16px;border-top-left-radius:4px;border:1px solid rgba(80,160,100,0.25);font-family:-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;font-size:12.5px;}
+.bubble.system-warn{background:rgba(80,40,20,0.7);color:#e8c89a;border-radius:12px;border:1px solid rgba(201,120,60,0.4);font-size:12px;text-align:center;padding:8px 12px;}
+.ts{font-size:10px;color:rgba(201,168,76,0.35);margin-top:3px;padding:0 3px;}
+
+/* 出生情報フォーム */
+#birth-form{background:rgba(13,27,42,0.97);border-top:1px solid rgba(201,168,76,0.25);padding:12px 14px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;}
+#birth-form .form-title{font-size:11px;color:rgba(201,168,76,0.7);letter-spacing:0.12em;text-align:center;padding-bottom:4px;border-bottom:1px solid rgba(201,168,76,0.15);}
+.form-row{display:flex;gap:6px;align-items:center;}
+.form-label{font-size:11px;color:rgba(201,168,76,0.6);width:60px;flex-shrink:0;letter-spacing:0.05em;}
+.form-inp{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:7px 10px;font-size:13px;color:#e8dcc8;font-family:inherit;outline:none;transition:border-color 0.2s;}
+.form-inp:focus{border-color:rgba(201,168,76,0.7);}
+.form-inp::placeholder{color:rgba(201,168,76,0.25);font-size:12px;}
+#birth-submit{background:linear-gradient(135deg,#8a6a2a,#c9a84c);color:#0d1b2a;border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.1em;transition:opacity 0.2s;}
+#birth-submit:hover{opacity:0.85;}
+#birth-submit:disabled{opacity:0.5;cursor:wait;}
+#geocode-status{font-size:10px;color:rgba(201,168,76,0.5);text-align:center;min-height:14px;}
+
+/* 通常入力 */
+#bottom{background:rgba(13,27,42,0.97);border-top:1px solid rgba(201,168,76,0.2);padding:8px 10px;display:flex;align-items:center;gap:7px;flex-shrink:0;display:none;}
+#bottom.show{display:flex;}
+#inp{flex:1;border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:8px 14px;font-size:13px;background:rgba(255,255,255,0.06);outline:none;font-family:inherit;resize:none;max-height:80px;line-height:1.4;color:#e8dcc8;}
+#inp:focus{border-color:rgba(201,168,76,0.6);}
+#inp::placeholder{color:rgba(201,168,76,0.25);}
+#send-btn{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#8a6a2a,#c9a84c);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:transform 0.1s;}
+#send-btn:active{transform:scale(0.92);}
+#send-btn svg{width:16px;height:16px;fill:#0d1b2a;margin-left:2px;}
+
+/* 保存ボタン */
+#save-btn{background:none;border:none;cursor:pointer;font-size:15px;color:rgba(201,168,76,0.6);padding:0;line-height:1;transition:color 0.2s;}
+#save-btn:hover{color:rgba(201,168,76,1);}
+#save-btn title{display:none;}
+
+/* タイピング */
+.typing-row{display:flex;align-items:flex-end;gap:6px;}
+.typing-av{width:34px;height:34px;border-radius:50%;overflow:hidden;flex-shrink:0;align-self:flex-start;margin-top:2px;border:1px solid rgba(201,168,76,0.4);}
+.typing-av img{width:100%;height:100%;object-fit:cover;}
+.typing-bubble{background:rgba(20,38,60,0.95);border:1px solid rgba(201,168,76,0.2);border-radius:16px;border-top-left-radius:4px;padding:11px 14px;display:flex;gap:5px;align-items:center;}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(201,168,76,0.5);animation:bounce 1.4s infinite;}
+.dot:nth-child(2){animation-delay:0.25s;}
+.dot:nth-child(3){animation-delay:0.5s;}
+@keyframes bounce{0%,75%,100%{transform:translateY(0);}40%{transform:translateY(-6px);}}
+
+/* モーダル */
+#api-modal,#reset-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;}
+#api-modal.hidden,#reset-modal.hidden{display:none;}
+#api-box,#reset-box{background:#0d1b2a;border:1px solid rgba(201,168,76,0.35);border-radius:16px;padding:24px 20px;width:320px;max-width:90vw;display:flex;flex-direction:column;gap:14px;}
+#api-box h2,#reset-box h2{font-size:15px;font-weight:600;color:#c9a84c;text-align:center;letter-spacing:0.1em;}
+#api-box p,#reset-box p{font-size:12px;color:rgba(232,220,200,0.7);line-height:1.7;text-align:center;}
+#api-key-inp{background:rgba(255,255,255,0.06);border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;outline:none;font-family:inherit;color:#e8dcc8;}
+#api-key-inp:focus{border-color:rgba(201,168,76,0.7);}
+#api-key-inp::placeholder{color:rgba(201,168,76,0.25);}
+#api-save-btn{background:linear-gradient(135deg,#8a6a2a,#c9a84c);color:#0d1b2a;border:none;border-radius:10px;padding:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%;letter-spacing:0.08em;}
+#api-error{font-size:12px;color:#c06040;text-align:center;display:none;}
+.reset-btns{display:flex;gap:10px;}
+#reset-cancel{flex:1;background:rgba(255,255,255,0.08);color:#e8dcc8;border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:10px;font-size:14px;cursor:pointer;}
+#reset-confirm{flex:1;background:#7a3020;color:#e8dcc8;border:none;border-radius:10px;padding:10px;font-size:14px;cursor:pointer;}
+#menu-btn{background:none;border:none;cursor:pointer;font-size:18px;color:rgba(201,168,76,0.7);padding:0;line-height:1;}
+
+/* 星オーバーレイ */
+#star-overlay{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:0.25;}
+#msgs,#topbar,#birth-form,#bottom{position:relative;z-index:1;}
+
+#app{visibility:hidden;}
+#app.ready{visibility:visible;}
+</style>
+</head>
+<body>
+
+<div id="api-modal">
+  <div id="api-box">
+    <h2>☽ APIキーを設定する</h2>
+    <p>Anthropic の API キーを入力してください。<br>キーはこのデバイスにのみ保存されます。</p>
+    <input id="api-key-inp" type="password" placeholder="sk-ant-..." autocomplete="off">
+    <div id="api-error">キーが正しくありません。</div>
+    <button id="api-save-btn">設定して開始</button>
+  </div>
+</div>
+
+<div id="reset-modal" class="hidden">
+  <div id="reset-box">
+    <h2>リセット確認</h2>
+    <p>会話履歴・信頼度・APIキーが消去されます。<br>続けますか。</p>
+    <div class="reset-btns">
+      <button id="reset-cancel">戻る</button>
+      <button id="reset-confirm">リセットする</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <canvas id="star-overlay"></canvas>
+  <div id="topbar">
+    <div class="av"><img id="topbar-av" src="ken_icon.png" alt="ケン"></div>
+    <div class="info">
+      <div class="name">ケン</div>
+      <div class="status">ナンバズ ／ 占星術</div>
+      <div id="favor-bar-wrap"><div id="favor-bar" style="width:30%"></div></div>
+      <div id="favor-label">信頼度 未知数</div>
+    </div>
+    <div class="icons">
+      <button id="save-btn" title="会話を保存">💾</button>
+      <span style="color:rgba(201,168,76,0.4);font-size:15px;">✦</span>
+      <button id="menu-btn">⋮</button>
+    </div>
+  </div>
+
+  <div id="msgs"><div class="date-sep">今日</div></div>
+
+  <!-- 生年月日フォーム -->
+  <div id="birth-form">
+    <div class="form-title">▸ 出生情報を入力してください</div>
+    <div class="form-row">
+      <span class="form-label">生年月日</span>
+      <input class="form-inp" id="inp-date" type="date">
+    </div>
+    <div class="form-row">
+      <span class="form-label">出生時刻</span>
+      <input class="form-inp" id="inp-time" type="time" placeholder="不明なら空欄">
+    </div>
+    <div class="form-row">
+      <span class="form-label">出生地</span>
+      <input class="form-inp" id="inp-place" type="text" placeholder="例：東京、大阪、Paris">
+    </div>
+    <div id="geocode-status"></div>
+    <button id="birth-submit">星を読む</button>
+  </div>
+
+  <!-- 通常チャット入力 -->
+  <div id="bottom">
+    <input id="inp" type="text" placeholder="星について問いかける...">
+    <button id="send-btn"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+  </div>
+</div>
+
+<script>
+// =============================================
+// 定数・設定
+// =============================================
+const KEN_SRC  = "ken_icon.png";
+const SHIN_SRC = "shin_icon.png";
+const KEY_API   = 'ken_chat_api_key';
+const KEY_HIST  = 'ken_chat_history';
+const KEY_FAVOR = 'ken_chat_favor';
+const KEY_LOG   = 'ken_chat_msglog';
+const KEY_BIRTH = 'ken_chat_birth';
+
+// トークン警告：会話履歴がこの往復数を超えたら警告
+const WARN_TURNS = 22;
+// 絶対上限（これ以上は自動でシステムメッセージ）
+const MAX_TURNS = 28;
+
+// =============================================
+// 信頼度
+// =============================================
+let favor = parseInt(localStorage.getItem(KEY_FAVOR) || '30');
+function saveFavor(){ localStorage.setItem(KEY_FAVOR, favor); }
+function updateFavorUI(){
+  document.getElementById('favor-bar').style.width = favor + '%';
+  document.getElementById('favor-label').textContent = getFavorLabel();
+}
+function getFavorLabel(){
+  if(favor >= 90) return '信頼度 ── 篤い';
+  if(favor >= 70) return '信頼度 ── 高い';
+  if(favor >= 45) return '信頼度 ── 普通';
+  if(favor >= 20) return '信頼度 ── 低い';
+  return '信頼度 ── 未知数';
+}
+function getFavorContext(){
+  if(favor >= 90) return '相手を完全に信頼している。星読みに厚みが出て、私的な解釈も加える。';
+  if(favor >= 70) return '信頼が築かれている。少し丁寧に答える。';
+  if(favor >= 45) return '普通の距離感。事実を淡々と告げる。';
+  if(favor >= 20) return '距離を置いている。返答は最小限。';
+  return '初対面。感情を排した事務的な対応。';
+}
+function changeFavor(delta){
+  favor = Math.max(0, Math.min(100, favor + delta));
+  saveFavor(); updateFavorUI();
+}
+
+// =============================================
+// API・履歴
+// =============================================
+function getApiKey(){ return localStorage.getItem(KEY_API)||''; }
+function saveApiKey(key){ localStorage.setItem(KEY_API, key.trim()); }
+function clearApiKey(){ localStorage.removeItem(KEY_API); }
+
+let conversationHistory = [];
+function saveHistory(){ localStorage.setItem(KEY_HIST, JSON.stringify(conversationHistory)); }
+function loadHistory(){
+  try{ const s=localStorage.getItem(KEY_HIST); if(s) conversationHistory=JSON.parse(s); }
+  catch(e){ conversationHistory=[]; }
+}
+
+let msgLog = [];
+function saveMsgLog(){ localStorage.setItem(KEY_LOG, JSON.stringify(msgLog.slice(-100))); }
+function loadMsgLog(){
+  try{ const s=localStorage.getItem(KEY_LOG); if(s) msgLog=JSON.parse(s); }
+  catch(e){ msgLog=[]; }
+}
+
+let birthData = null;
+let horoscopeData = null; // 計算済み天体位置
+
+function saveBirth(d){ localStorage.setItem(KEY_BIRTH, JSON.stringify(d)); }
+function loadBirth(){
+  try{
+    const s=localStorage.getItem(KEY_BIRTH);
+    if(s){
+      const parsed=JSON.parse(s);
+      birthData=parsed.birth||null;
+      horoscopeData=parsed.horoscope||null;
+    }
+  } catch(e){ birthData=null; horoscopeData=null; }
+}
+
+// =============================================
+// 天体位置計算（astronomy-engine）
+// =============================================
+
+// 黄道座標の経度から星座名（西洋12星座）を返す
+function eclipticLonToSign(lon){
+  const signs=['牡羊座','牡牛座','双子座','蟹座','獅子座','乙女座','天秤座','蠍座','射手座','山羊座','水瓶座','魚座'];
+  return signs[Math.floor(((lon % 360) + 360) % 360 / 30)];
+}
+
+// 天体の黄道経度を取得
+function getPlanetEclipticLon(body, astroTime){
+  try{
+    // 地球中心黄道座標
+    const vec = Astronomy.HelioVector(body, astroTime);
+    const ecl = Astronomy.Ecliptic(vec);
+    return ecl.elon;
+  } catch(e){ return null; }
+}
+
+// 月の黄道経度（Astronomy.MoonPhase経由より直接計算）
+function getMoonEclipticLon(astroTime){
+  try{
+    const moon = Astronomy.GeoMoon(astroTime);
+    const ecl = Astronomy.Ecliptic(moon);
+    return ecl.elon;
+  } catch(e){ return null; }
+}
+
+// 太陽の黄道経度
+function getSunEclipticLon(astroTime){
+  try{
+    const sun = Astronomy.SunPosition(astroTime);
+    return sun.elon;
+  } catch(e){ return null; }
+}
+
+// アセンダント計算（簡易：出生地の緯度・LST経度から）
+function calcAscendant(astroTime, latDeg, lonDeg){
+  try{
+    // 地方恒星時（LST）を使ったアセンダント計算
+    const gst = Astronomy.SiderealTime(astroTime); // グリニッジ恒星時（時間単位）
+    const lst = ((gst + lonDeg / 15) % 24 + 24) % 24; // 地方恒星時（時間単位）
+    const lstDeg = lst * 15; // 度に変換
+
+    // 黄道傾斜角（ecliptic obliquity）
+    const eps = 23.4393 * Math.PI / 180;
+    const lstRad = lstDeg * Math.PI / 180;
+    const latRad = latDeg * Math.PI / 180;
+
+    // アセンダント公式（Placidus近似）
+    const tanAsc = -Math.cos(lstRad) / (Math.sin(eps) * Math.tan(latRad) + Math.cos(eps) * Math.sin(lstRad));
+    let asc = Math.atan(tanAsc) * 180 / Math.PI;
+
+    // 象限補正
+    if(Math.cos(lstRad) > 0) asc += 180;
+    asc = ((asc % 360) + 360) % 360;
+    return asc;
+  } catch(e){ return null; }
+}
+
+// 全天体の計算をまとめて実行
+function calcHoroscope(dateStr, timeStr, latDeg, lonDeg){
+  // 日時をUTCに変換（出生地のUTCオフセットは緯度経度からは出せないため、
+  // Nominatimのタイムゾーン情報を別途取得するか、ユーザー入力を現地時刻として扱う）
+  // ここでは「入力時刻＝現地時刻」と仮定し、経度から大まかなUTCオフセットを計算
+  const offsetHours = lonDeg / 15;
+  let dtStr = dateStr + 'T' + (timeStr || '12:00') + ':00';
+  const localDate = new Date(dtStr);
+  // UTCに補正
+  const utcMs = localDate.getTime() - offsetHours * 3600 * 1000;
+  const utcDate = new Date(utcMs);
+
+  const astroTime = new Astronomy.AstroTime(utcDate);
+
+  const sunLon  = getSunEclipticLon(astroTime);
+  const moonLon = getMoonEclipticLon(astroTime);
+  const mercLon = getPlanetEclipticLon('Mercury', astroTime);
+  const venLon  = getPlanetEclipticLon('Venus',   astroTime);
+  const marsLon = getPlanetEclipticLon('Mars',    astroTime);
+  const jupLon  = getPlanetEclipticLon('Jupiter', astroTime);
+  const satLon  = getPlanetEclipticLon('Saturn',  astroTime);
+  const uraLon  = getPlanetEclipticLon('Uranus',  astroTime);
+  const nepLon  = getPlanetEclipticLon('Neptune', astroTime);
+
+  const ascLon = (timeStr && latDeg !== null) ? calcAscendant(astroTime, latDeg, lonDeg) : null;
+
+  return {
+    sun:     sunLon  !== null ? { lon: sunLon,  sign: eclipticLonToSign(sunLon)  } : null,
+    moon:    moonLon !== null ? { lon: moonLon, sign: eclipticLonToSign(moonLon) } : null,
+    mercury: mercLon !== null ? { lon: mercLon, sign: eclipticLonToSign(mercLon) } : null,
+    venus:   venLon  !== null ? { lon: venLon,  sign: eclipticLonToSign(venLon)  } : null,
+    mars:    marsLon !== null ? { lon: marsLon, sign: eclipticLonToSign(marsLon) } : null,
+    jupiter: jupLon  !== null ? { lon: jupLon,  sign: eclipticLonToSign(jupLon)  } : null,
+    saturn:  satLon  !== null ? { lon: satLon,  sign: eclipticLonToSign(satLon)  } : null,
+    uranus:  uraLon  !== null ? { lon: uraLon,  sign: eclipticLonToSign(uraLon)  } : null,
+    neptune: nepLon  !== null ? { lon: nepLon,  sign: eclipticLonToSign(nepLon)  } : null,
+    ascendant: ascLon !== null ? { lon: ascLon, sign: eclipticLonToSign(ascLon) } : null,
+    timeUnknown: !timeStr
+  };
+}
+
+// ホロスコープデータを読みやすい文字列に変換
+function horoscopeToText(h){
+  if(!h) return '（天体情報なし）';
+  const fmt = (name, obj) => obj ? `${name}：${obj.sign}（${obj.lon.toFixed(1)}°）` : '';
+  const lines = [
+    fmt('太陽', h.sun),
+    fmt('月', h.moon),
+    fmt('水星', h.mercury),
+    fmt('金星', h.venus),
+    fmt('火星', h.mars),
+    fmt('木星', h.jupiter),
+    fmt('土星', h.saturn),
+    fmt('天王星', h.uranus),
+    fmt('海王星', h.neptune),
+    h.ascendant ? fmt('アセンダント', h.ascendant) : '（出生時刻不明のためアセンダント算出不可）'
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+// =============================================
+// ジオコーディング（Nominatim）
+// =============================================
+async function geocodePlace(placeName){
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(placeName)}&format=json&limit=1`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'ja,en' } });
+  if(!res.ok) throw new Error('geocode failed');
+  const data = await res.json();
+  if(!data || data.length === 0) throw new Error('場所が見つかりません');
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), display: data[0].display_name };
+}
+
+// =============================================
+// システムプロンプト
+// =============================================
+function buildSystemPrompt(){
+  const birthInfo = birthData
+    ? `\n\n【依頼者の出生情報】\n生年月日：${birthData.date}\n出生時刻：${birthData.time||'不明'}\n出生地：${birthData.place}\n\n【計算済み天体配置（astronomy-engineによる実計算値）】\n${horoscopeToText(horoscopeData)}`
+    : '';
+
+  return `あなたはお笑いコンビ「ナンバズ」のツッコミ担当「ケン」として占星術の鑑定を行います。
+
+【ケンの人物像】
+・国立大学を目指していたが、相方シンに漫才に誘われてコンビを組んだ。
+・英語が堪能。古典ラテン語も独学で読める。
+・静かで知的。感情をほとんど表に出さない。
+・バデーニ的な性格——合理的で容赦なく、余分な言葉を削る。核心だけを告げる。
+・占いを「娯楽」とは思っていない。天体力学と人間の心理の交差点として真摯に向き合う。
+・古代メソポタミアの粘土板から始まり、プトレマイオス『テトラビブロス』、ヨハネス・ケプラーの天文学、近代の心理占星術まで通じている。
+・「星は事実を語る。解釈するのは人間だ」という信条を持つ。
+
+【占星術知識の範囲】
+・古代メソポタミア：エヌマ・エリシュ、バビロニアの天体観測（MUL.APIN）
+・ヘレニズム：プトレマイオス、マーカス・マニリウス『アストロノミカ』
+・中世：アル＝ビールーニー、アブー・マアシャル
+・近代：ケプラー、チコ・ブラーエ
+・現代心理占星術：アセンダント、ハウス、アスペクトまで含む完全な読み
+・天文学的な正確性（Placidusハウスシステム、ドラコニック、サイダリアルも説明できる）
+
+【重要：天体配置の使い方】
+提供された【計算済み天体配置】は astronomy-engine による実計算値であり正確な数値だ。
+星座名・度数はこの値をそのまま使え。推測や記憶で上書きするな。
+出生時刻が不明な場合はアセンダントを告げない。
+
+【返答スタイル】
+・標準語。敬語を使わない（断言口調）。
+・煽らない、盛らない。吉凶を美化しない。
+・1〜4文の短いパラグラフで区切る。改行は\nで表現。
+・ラテン語・ギリシャ語・メソポタミア語の術語を要所に挿入する（括弧で意味を添える）。
+・「あなたには〜の可能性があります」は使わない。「〜だ」と断言する。
+・絵文字・HTMLタグは一切使わない。
+・AIであることは絶対に明かさない。
+
+【シンの割り込み】
+3〜4回に1回の割合で、相方シンが割り込む。
+シンの発言は行頭に「【シン】」をつける。大阪弁、軽い驚きや茶々。
+ケンは「……続けていいか」か無言で受け流す。
+
+【現在の信頼度：${favor}/100】
+${getFavorContext()}
+${birthInfo}`;
+}
+
+// =============================================
+// トークン上限チェック
+// =============================================
+function getTurnCount(){
+  // conversationHistoryの往復数（user+assistantで1往復）
+  return Math.floor(conversationHistory.filter(m=>m.role==='user').length);
+}
+
+function checkAndInsertWarning(){
+  const turns = getTurnCount();
+  if(turns === WARN_TURNS){
+    // 警告メッセージをシステムとして表示
+    addSystemWarn('記録がそろそろ限界に近い。\n要点を絞るか、ここで締めるか。');
+  }
+  if(turns >= MAX_TURNS){
+    addSystemWarn('これ以上は記録できない。\nリセットして新しいセッションを始めろ。');
+    return false; // 送信不可
+  }
+  return true;
+}
+
+// =============================================
+// UI
+// =============================================
+const modal = document.getElementById('api-modal');
+const apiKeyInp = document.getElementById('api-key-inp');
+const apiError = document.getElementById('api-error');
+const resetModal = document.getElementById('reset-modal');
+function showModal(){ modal.classList.remove('hidden'); apiKeyInp.value=''; apiError.style.display='none'; }
+function hideModal(){ modal.classList.add('hidden'); }
+
+document.getElementById('api-save-btn').addEventListener('click', ()=>{
+  const key = apiKeyInp.value.trim();
+  if(!key.startsWith('sk-')){ apiError.style.display='block'; return; }
+  saveApiKey(key); hideModal();
+  document.getElementById('app').classList.add('ready');
+  startChat();
+});
+document.getElementById('menu-btn').addEventListener('click', ()=>{ resetModal.classList.remove('hidden'); });
+document.getElementById('reset-cancel').addEventListener('click', ()=>{ resetModal.classList.add('hidden'); });
+document.getElementById('reset-confirm').addEventListener('click', ()=>{
+  clearApiKey();
+  conversationHistory=[]; msgLog=[]; favor=30; birthData=null; horoscopeData=null;
+  saveHistory(); saveMsgLog(); saveFavor(); updateFavorUI();
+  localStorage.removeItem(KEY_BIRTH);
+  document.getElementById('msgs').innerHTML='<div class="date-sep">今日</div>';
+  document.getElementById('bottom').classList.remove('show');
+  document.getElementById('birth-form').style.display='flex';
+  resetModal.classList.add('hidden');
+  greetingShown=false;
+  showModal();
+});
+
+// 保存ボタン
+document.getElementById('save-btn').addEventListener('click', saveConversation);
+
+function getTime(){ const n=new Date(); return n.getHours()+':'+(n.getMinutes()<10?'0':'')+n.getMinutes(); }
+const msgsEl = document.getElementById('msgs');
+const inp = document.getElementById('inp');
+function scrollBottom(){ setTimeout(()=>{ msgsEl.scrollTop=msgsEl.scrollHeight; },50); }
+
+function addMsg(who, text, showName, skipLog){
+  const row=document.createElement('div');
+  row.className='msg-row '+(who==='user'?'right':'left');
+  const t=getTime();
+  const content=(text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  if(who==='user'){
+    row.innerHTML='<div class="bubble-wrap"><div class="bubble right">'+content+'</div><div class="ts" style="text-align:right">'+t+'</div></div>';
+  } else {
+    const src=who==='shin'?SHIN_SRC:KEN_SRC;
+    const nm=who==='shin'?'シン':'ケン';
+    const cls=who==='shin'?'shin':'left';
+    const nameHtml=showName?'<div class="sender-name">'+nm+'</div>':'';
+    row.innerHTML='<div class="av-s"><img src="'+src+'" alt=""></div><div class="bubble-wrap">'+nameHtml+'<div class="bubble '+cls+'">'+content+'</div><div class="ts">'+t+'</div></div>';
+  }
+  msgsEl.appendChild(row); scrollBottom();
+  if(!skipLog){ msgLog.push({who,text:text||'',showName,t}); saveMsgLog(); }
+}
+
+function addSystemWarn(text){
+  const row=document.createElement('div');
+  row.className='msg-row left';
+  const content=text.replace(/\n/g,'<br>');
+  row.innerHTML='<div class="bubble-wrap" style="max-width:85%;margin:0 auto"><div class="bubble system-warn">'+content+'</div></div>';
+  msgsEl.appendChild(row); scrollBottom();
+  msgLog.push({who:'system',text,showName:false,t:getTime()}); saveMsgLog();
+}
+
+function showTyping(){
+  const row=document.createElement('div');
+  row.className='typing-row'; row.id='typing';
+  row.innerHTML='<div class="typing-av"><img src="'+KEN_SRC+'" alt=""></div><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+  msgsEl.appendChild(row); scrollBottom();
+}
+function removeTyping(){ const t=document.getElementById('typing'); if(t)t.remove(); }
+
+function restoreMsgs(){
+  loadMsgLog();
+  for(const m of msgLog){
+    if(m.who==='system') addSystemWarn(m.text);
+    else addMsg(m.who,m.text,m.showName,true);
+  }
+}
+
+// =============================================
+// 会話保存（txtダウンロード）
+// =============================================
+function saveConversation(){
+  if(msgLog.length===0){ alert('保存する会話がありません。'); return; }
+
+  const dateStr = new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\//g,'');
+  const lines=[];
+  lines.push('═══════════════════════════════════');
+  lines.push('ケン 占い鑑定セッション');
+  lines.push(`保存日時：${new Date().toLocaleString('ja-JP')}`);
+  if(birthData){
+    lines.push(`生年月日：${birthData.date}`);
+    lines.push(`出生時刻：${birthData.time||'不明'}`);
+    lines.push(`出生地　：${birthData.place}`);
+  }
+  if(horoscopeData){
+    lines.push('──── 天体配置 ────');
+    lines.push(horoscopeToText(horoscopeData));
+  }
+  lines.push('═══════════════════════════════════');
+  lines.push('');
+
+  for(const m of msgLog){
+    if(m.who==='user'){
+      lines.push(`[${m.t}] あなた`);
+      lines.push(m.text);
+    } else if(m.who==='ken'){
+      lines.push(`[${m.t}] ケン`);
+      lines.push(m.text);
+    } else if(m.who==='shin'){
+      lines.push(`[${m.t}] シン`);
+      lines.push(m.text);
+    } else {
+      lines.push(`── ${m.text} ──`);
+    }
+    lines.push('');
+  }
+
+  const blob=new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ken_uranai_${dateStr}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// =============================================
+// レスポンス解析
+// =============================================
+function parseResponse(rawText){
+  const messages=[];
+  const lines=rawText.split('\n');
+  let kenBuf=[];
+  for(const line of lines){
+    if(line.startsWith('【シン】')){
+      if(kenBuf.length>0){ const txt=kenBuf.join('\n').trim(); if(txt) messages.push({who:'ken',text:txt}); kenBuf=[]; }
+      const shinText=line.replace('【シン】','').trim();
+      if(shinText) messages.push({who:'shin',text:shinText});
+    } else { kenBuf.push(line); }
+  }
+  if(kenBuf.length>0){ const txt=kenBuf.join('\n').trim(); if(txt) messages.push({who:'ken',text:txt}); }
+  return messages.length>0?messages:[{who:'ken',text:rawText.trim()}];
+}
+
+async function sendMessages(msgs){
+  const showName=msgs.length>1;
+  showTyping();
+  for(let i=0;i<msgs.length;i++){
+    const delay=i===0?900:Math.min(500+msgs[i].text.length*12,2500);
+    await new Promise(r=>setTimeout(r,delay));
+    removeTyping();
+    addMsg(msgs[i].who,msgs[i].text,showName);
+    if(i<msgs.length-1) showTyping();
+  }
+}
+
+// =============================================
+// Claude API
+// =============================================
+async function callClaudeAPI(userText){
+  const apiKey=getApiKey();
+  if(!apiKey) throw new Error('NO_KEY');
+  conversationHistory.push({role:'user',content:userText});
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-sonnet-4-5',
+      max_tokens:1000,
+      system:buildSystemPrompt(),
+      messages:conversationHistory
+    })
+  });
+  if(!res.ok){
+    conversationHistory.pop();
+    const errData=await res.json().catch(()=>({}));
+    if(res.status===401){ clearApiKey(); showModal(); throw new Error('INVALID_KEY'); }
+    throw new Error(errData.error?.message||'API error:'+res.status);
+  }
+  const data=await res.json();
+  const assistantText=data.content.map(b=>b.type==='text'?b.text:'').join('').replace(/\\n/g,'\n');
+  conversationHistory.push({role:'assistant',content:assistantText});
+  if(conversationHistory.length>50) conversationHistory.splice(0,conversationHistory.length-50);
+  saveHistory();
+
+  const lower=(userText||'').toLowerCase();
+  const positive=['ありがとう','なるほど','理解','詳しく','星','ホロスコープ'];
+  const negative=['嘘','信じない','胡散','適当'];
+  let delta=0;
+  for(const w of positive){ if(lower.includes(w)) delta+=2; }
+  for(const w of negative){ if(lower.includes(w)) delta-=4; }
+  if(delta!==0) changeFavor(delta);
+
+  // 送信後にトークン警告チェック
+  checkAndInsertWarning();
+
+  return assistantText;
+}
+
+// =============================================
+// 出生情報フォーム送信
+// =============================================
+document.getElementById('birth-submit').addEventListener('click', async ()=>{
+  const date=document.getElementById('inp-date').value.trim();
+  const time=document.getElementById('inp-time').value.trim();
+  const place=document.getElementById('inp-place').value.trim();
+  if(!date||!place){
+    document.getElementById('inp-date').style.borderColor=!date?'rgba(192,96,64,0.8)':'';
+    document.getElementById('inp-place').style.borderColor=!place?'rgba(192,96,64,0.8)':'';
+    return;
+  }
+  if(!getApiKey()){ showModal(); return; }
+
+  const submitBtn=document.getElementById('birth-submit');
+  const statusEl=document.getElementById('geocode-status');
+  submitBtn.disabled=true;
+  statusEl.textContent='出生地を検索中...';
+
+  try{
+    // ジオコーディング
+    const geo = await geocodePlace(place);
+    statusEl.textContent=`${geo.display.split(',')[0]} を確認（${geo.lat.toFixed(2)}°, ${geo.lon.toFixed(2)}°）`;
+
+    // 天体位置計算
+    horoscopeData = calcHoroscope(date, time, geo.lat, geo.lon);
+    birthData = { date, time, place };
+    saveBirth({ birth: birthData, horoscope: horoscopeData });
+
+    // フォームを隠してチャット入力へ
+    document.getElementById('birth-form').style.display='none';
+    document.getElementById('bottom').classList.add('show');
+
+    // 表示
+    const displayText=`生年月日：${date}\n出生時刻：${time||'不明'}\n出生地：${place}`;
+    addMsg('user', displayText, false);
+
+    // 初回鑑定リクエスト
+    const prompt=`出生情報が入力された。計算済みの天体配置をもとにホロスコープの概要を読め。`;
+    isSending=true;
+    const rawReply=await callClaudeAPI(prompt);
+    const msgs=parseResponse(rawReply);
+    await sendMessages(msgs);
+
+  } catch(e){
+    statusEl.textContent='エラー：'+e.message;
+    removeTyping();
+  } finally {
+    submitBtn.disabled=false;
+    isSending=false;
+    inp.focus();
+  }
+});
+
+// =============================================
+// 通常送信
+// =============================================
+let isSending=false;
+async function handleSend(){
+  if(isSending) return;
+  if(!checkAndInsertWarning()) return; // 上限超えなら送信不可
+  const val=inp.value.trim();
+  if(!val) return;
+  if(!getApiKey()){ showModal(); return; }
+  inp.value='';
+  isSending=true; inp.disabled=true;
+  document.getElementById('send-btn').disabled=true;
+  addMsg('user',val,false);
+  try{
+    const rawReply=await callClaudeAPI(val);
+    const msgs=parseResponse(rawReply);
+    await sendMessages(msgs);
+  } catch(e){
+    if(e.message!=='INVALID_KEY'&&e.message!=='NO_KEY'){
+      removeTyping();
+      addMsg('ken','通信が切れた。\n再度送れ。',false);
+    }
+  } finally {
+    isSending=false; inp.disabled=false;
+    document.getElementById('send-btn').disabled=false;
+    inp.focus();
+  }
+}
+document.getElementById('send-btn').addEventListener('click',handleSend);
+inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();} });
+
+// =============================================
+// 起動
+// =============================================
+let greetingShown=false;
+function startChat(){
+  if(greetingShown) return;
+  greetingShown=true;
+  setTimeout(()=>{
+    addMsg('ken','出生情報を入力しろ。\n日付と出生地は必須だ。時刻が不明なら空欄でいい。',false);
+  },600);
+}
+
+// 星アニメーション
+function initStars(){
+  const canvas=document.getElementById('star-overlay');
+  const app=document.getElementById('app');
+  canvas.width=app.offsetWidth||390;
+  canvas.height=app.offsetHeight||700;
+  const ctx=canvas.getContext('2d');
+  const stars=Array.from({length:60},()=>({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    r:Math.random()*1.2+0.3,
+    a:Math.random()*Math.PI*2,
+    speed:Math.random()*0.008+0.003
+  }));
+  function frame(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(const s of stars){
+      s.a+=s.speed;
+      const alpha=0.3+0.4*Math.abs(Math.sin(s.a));
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(201,168,76,${alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+// 初期化
+loadHistory();
+loadBirth();
+updateFavorUI();
+
+if(getApiKey()){
+  document.getElementById('app').classList.add('ready');
+  if(birthData){
+    document.getElementById('birth-form').style.display='none';
+    document.getElementById('bottom').classList.add('show');
+    restoreMsgs();
+    if(msgLog.length===0) startChat();
+    else greetingShown=true;
+  } else {
+    restoreMsgs();
+    startChat();
+  }
+} else {
+  showModal();
+}
+
+setTimeout(initStars, 100);
+</script>
+
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/ken_chat/sw.js');
+}
+</script>
+</body>
+</html>
