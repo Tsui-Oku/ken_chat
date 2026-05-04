@@ -15,17 +15,19 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ケン 占い</title>
   <!-- astronomy-engine: 天体位置計算ライブラリ -->
-  <script src="astronomy.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.19/astronomy.browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-
 body{
-  background:url('ken_bg.jpg') center/contain no-repeat fixed;
-  background-color: #050d15;
-  
+  background:#000;
   display:flex;justify-content:center;align-items:center;
   min-height:100vh;
   font-family:-apple-system,'Hiragino Mincho ProN','Yu Mincho','Hiragino Kaku Gothic ProN',serif;
+  transition:background 0.8s ease;
+}
+body.unlocked{
+  background:url('ken_bg.jpg') center/contain no-repeat fixed;
+  background-color:#050d15;
 }
 #app{width:390px;height:700px;background:rgba(13,27,42,0.92);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 4px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(201,168,76,0.3);position:relative;backdrop-filter:blur(8px);}
 #topbar{background:linear-gradient(180deg,#0d1b2a 0%,#112236 100%);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;border-bottom:1px solid rgba(201,168,76,0.3);}
@@ -436,8 +438,7 @@ function buildSystemPrompt(){
 出生時刻が不明な場合はアセンダントを告げない。
 
 【返答スタイル】
-・基本は標準語。敬語を使わない（断言口調）。
-・シンが割り込んできたときだけ、ごく自然に関西弁が少し混じる（「なんやねん」「ええから続けろ」程度）。
+・標準語。敬語を使わない（断言口調）。
 ・煽らない、盛らない。吉凶を美化しない。
 ・1〜4文の短いパラグラフで区切る。改行は\nで表現。
 ・ラテン語・ギリシャ語・メソポタミア語の術語を要所に挿入する（括弧で意味を添える）。
@@ -490,6 +491,7 @@ document.getElementById('api-save-btn').addEventListener('click', ()=>{
   const key = apiKeyInp.value.trim();
   if(!key.startsWith('sk-')){ apiError.style.display='block'; return; }
   saveApiKey(key); hideModal();
+  document.body.classList.add('unlocked');
   document.getElementById('app').classList.add('ready');
   startChat();
 });
@@ -497,6 +499,7 @@ document.getElementById('menu-btn').addEventListener('click', ()=>{ resetModal.c
 document.getElementById('reset-cancel').addEventListener('click', ()=>{ resetModal.classList.add('hidden'); });
 document.getElementById('reset-confirm').addEventListener('click', ()=>{
   clearApiKey();
+  document.body.classList.remove('unlocked');
   conversationHistory=[]; msgLog=[]; favor=30; birthData=null; horoscopeData=null;
   saveHistory(); saveMsgLog(); saveFavor(); updateFavorUI();
   localStorage.removeItem(KEY_BIRTH);
@@ -817,6 +820,7 @@ loadBirth();
 updateFavorUI();
 
 if(getApiKey()){
+  document.body.classList.add('unlocked');
   document.getElementById('app').classList.add('ready');
   if(birthData){
     document.getElementById('birth-form').style.display='none';
