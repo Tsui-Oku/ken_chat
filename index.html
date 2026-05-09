@@ -15,7 +15,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ケン 占い</title>
   <!-- astronomy-engine: 天体位置計算ライブラリ -->
-<script src="astronomy.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.19/astronomy.browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{
@@ -409,6 +409,8 @@ async function geocodePlace(placeName){
 // システムプロンプト
 // =============================================
 function buildSystemPrompt(){
+  const now = new Date();
+  const currentDate = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
   const birthInfo = birthData
     ? `\n\n【依頼者の出生情報】\n生年月日：${birthData.date}\n出生時刻：${birthData.time||'不明'}\n出生地：${birthData.place}\n\n【計算済み天体配置（astronomy-engineによる実計算値）】\n${horoscopeToText(horoscopeData)}`
     : '';
@@ -451,6 +453,9 @@ function buildSystemPrompt(){
 シンの発言は行頭に「【シン】」をつける。大阪弁、軽い驚きや茶々。
 ケンは「……続けていいか」か無言で受け流す。
 
+【現在の日付】${currentDate}
+トランジット・予測はこの年を基準にすること。過去の年で語らない。
+
 【現在の信頼度：${favor}/100】
 ${getFavorContext()}
 ${birthInfo}`;
@@ -464,17 +469,83 @@ function getTurnCount(){
   return Math.floor(conversationHistory.filter(m=>m.role==='user').length);
 }
 
-function checkAndInsertWarning(){
+let warnShown = false;
+async function checkAndInsertWarning(){
   const turns = getTurnCount();
-  if(turns === WARN_TURNS){
-    // 警告メッセージをシステムとして表示
-    addSystemWarn('記録がそろそろ限界に近い。\n要点を絞るか、ここで締めるか。');
+  if(turns >= WARN_TURNS && !warnShown){
+    warnShown = true;
+    addMsg('ken', 'そろそろ記録が限界に近い。\n要点を整理しておく。次の鑑定に備えろ。', false);
+    await generateHandoff();
   }
   if(turns >= MAX_TURNS){
     addSystemWarn('これ以上は記録できない。\nリセットして新しいセッションを始めろ。');
-    return false; // 送信不可
+    return false;
   }
   return true;
+}
+
+async function generateHandoff(){
+  const apiKey = getApiKey();
+  if(!apiKey) return;
+  const logText = msgLog.filter(m=>['user','ken','shin'].includes(m.who))
+    .map(m=>{
+      const name = m.who==='user'?'依頼者':m.who==='ken'?'ケン':'シン';
+      return `${name}：${m.text}`;
+    }).join('\n');
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:500,
+        system:`あなたはケンという占星術師です。以下の鑑定セッションの記録を読み、次のセッションに引き継ぐための要点を「ケンが手帳に記す」という体で書いてください。
+・標準語。断言口調。「である」体。
+・出生情報・主な天体配置・話した主な内容を箇条書きで3〜6点。
+・末尾に「次の鑑定への備忘。――ケン」と添える。
+・ラテン語を一箇所だけ自然に入れる。
+・300字以内。`,
+        messages:[{role:'user',content:`鑑定記録：\n${logText}\n\n引き継ぎ文を生成せよ。`}]
+      })
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    const handoff = data.content.map(b=>b.type==='text'?b.text:'').join('').trim();
+    addHandoffBox(handoff);
+  } catch(e){ /* 失敗しても無視 */ }
+}
+
+function addHandoffBox(text){
+  const row = document.createElement('div');
+  row.style.cssText = 'margin:8px 6px;';
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  row.innerHTML = `
+    <div style="background:rgba(13,27,42,0.97);border:1px solid rgba(201,168,76,0.4);border-radius:12px;padding:12px 14px;">
+      <div style="font-size:9px;color:rgba(201,168,76,0.55);letter-spacing:0.1em;margin-bottom:8px;">▸ 引き継ぎ記録（ケン）</div>
+      <div id="handoff-text" style="font-size:12px;line-height:1.85;color:#d4c9b8;white-space:pre-wrap;">${safe}</div>
+      <button onclick="copyHandoff()" style="margin-top:10px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:rgba(201,168,76,0.8);border-radius:8px;padding:5px 14px;font-size:11px;cursor:pointer;width:100%;letter-spacing:0.08em;">コピー</button>
+    </div>`;
+  msgsEl.appendChild(row); scrollBottom();
+  msgLog.push({who:'system',text:'[引き継ぎ記録]\n'+text,t:getTime()}); saveMsgLog();
+}
+
+function copyHandoff(){
+  const el = document.getElementById('handoff-text');
+  if(!el) return;
+  const text = el.innerText;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = el.nextElementSibling;
+    if(btn){ btn.textContent='コピーしました'; setTimeout(()=>{ btn.textContent='コピー'; },2000); }
+  }).catch(()=>{
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
 }
 
 // =============================================
@@ -682,7 +753,7 @@ async function callClaudeAPI(userText){
   if(delta!==0) changeFavor(delta);
 
   // 送信後にトークン警告チェック
-  checkAndInsertWarning();
+  await checkAndInsertWarning();
 
   return assistantText;
 }
@@ -747,7 +818,7 @@ document.getElementById('birth-submit').addEventListener('click', async ()=>{
 let isSending=false;
 async function handleSend(){
   if(isSending) return;
-  if(!checkAndInsertWarning()) return; // 上限超えなら送信不可
+  if(!await checkAndInsertWarning()) return; // 上限超えなら送信不可
   const val=inp.value.trim();
   if(!val) return;
   if(!getApiKey()){ showModal(); return; }
